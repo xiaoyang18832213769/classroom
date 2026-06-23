@@ -604,7 +604,6 @@ body {
       <button class="nav-tab" data-page="manage">班级管理</button>
     </div>
     <div class="nav-right">
-      <span id="fileWarn" style="display:none;font-size:0.75rem;color:var(--subtract);white-space:nowrap;margin-right:0.5rem;">📁 本地文件 · 云同步受限</span>
       <span id="syncIndicator" style="display:none;font-size:0.8rem;color:var(--add);white-space:nowrap;">☁ 已同步</span>
       <button class="batch-toggle" id="batchToggle" title="批量选择学生统一加减分">☐ 批量操作</button>
       <label class="teacher-toggle" title="切换教师编辑模式">
@@ -734,9 +733,6 @@ ALTER TABLE classroom_data DISABLE ROW LEVEL SECURITY;</pre>
    ================================================================ */
 const STORAGE_KEY = 'classroom_points_data';
 const DATA_VERSION = 2;
-const isServerMode = !!(window.location.protocol === 'http:' || window.location.protocol === 'https:');
-const isFileProtocol = window.location.protocol === 'file:';
-let serverMtime = 0;
 
 // ── Cloud Sync (Supabase) ──
 // Pre-configured Supabase project (remove to force manual config)
@@ -817,11 +813,7 @@ async function saveToCloud(data) {
     console.warn('Cloud save failed, falling back to localStorage:', e.message);
     if (cloudOnline) {
       cloudOnline = false;
-      if (isFileProtocol) {
-        flashSyncIndicator('⚠ 请用HTTP访问以启用云同步');
-      } else {
-        flashSyncIndicator('⚠ 云端离线，使用本地存储');
-      }
+      flashSyncIndicator('⚠ 云端离线，使用本地存储');
     }
     saveDataLocal(data);
   }
@@ -868,67 +860,7 @@ function saveDataLocal(data) {
   } catch (e) { console.error('保存失败', e); showToast('保存失败，请检查浏览器存储空间'); }
 }
 
-async function loadDataFromServer() {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000); // 3秒超时，避免WiFi关闭时卡住
-    const res = await fetch('/api/data', { signal: controller.signal });
-    clearTimeout(timeout);
-    if (!res.ok) throw new Error('Server error');
-    const data = await res.json();
-    serverMtime = data._serverTime || 0;
-    delete data._serverTime;
-    // If server signals empty (no data file yet), return the empty flag
-    if (data._empty) {
-      console.log('📡 服务器数据为空，等待初始化');
-      return null;
-    }
-    if (data._version !== DATA_VERSION) {
-      console.log('Server data version mismatch, migrating...');
-      return null;
-    }
-    return data;
-  } catch (e) {
-    console.error('从服务器加载失败:', e);
-    return null;
-  }
-}
-
-async function saveDataToServer(data) {
-  // Never save empty student list (protect against accidental data loss)
-  if (!data.students || data.students.length === 0) {
-    console.warn('⚠️ 拒绝保存空学生列表');
-    return;
-  }
-  try {
-    data._version = DATA_VERSION;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch('/api/data', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      if (res.status === 409) {
-        console.warn('⚠️ 服务器拒绝覆盖（保护已有数据）');
-        showToast('⚠️ 数据保护：服务器拒绝了空数据覆盖');
-        return;
-      }
-      throw new Error(err.error || 'Server save failed');
-    }
-    const resp = await res.json();
-    serverMtime = resp.time || Date.now();
-  } catch (e) {
-    console.error('保存到服务器失败:', e);
-    showToast('⚠️ 同步失败，请检查网络连接');
-  }
-}
-
-// Poll server for changes from other users
+// ── Sync Indicator ──
 let syncIndicatorTimer = null;
 function flashSyncIndicator(msg) {
   const el = document.getElementById('syncIndicator');
@@ -940,38 +872,13 @@ function flashSyncIndicator(msg) {
   syncIndicatorTimer = setTimeout(() => { el.style.display = 'none'; }, 3000);
 }
 
-async function pollServer() {
-  if (!isServerMode) return;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch('/api/check', { signal: controller.signal });
-    clearTimeout(timeout);
-    if (!res.ok) return;
-    const info = await res.json();
-    if (info.mtime > serverMtime) {
-      const data = await loadDataFromServer();
-      if (data) {
-        const oldTotal = appData.students.reduce((s, st) => s + (appData.points[st.id] ? appData.points[st.id].learning + appData.points[st.id].homework + appData.points[st.id].classroom + appData.points[st.id].contribution : 0), 0);
-        appData = data;
-        serverMtime = info.mtime;
-        const newTotal = appData.students.reduce((s, st) => s + (appData.points[st.id] ? appData.points[st.id].learning + appData.points[st.id].homework + appData.points[st.id].classroom + appData.points[st.id].contribution : 0), 0);
-        refreshAll();
-        flashSyncIndicator('🔄 已同步其他设备的更新');
-        console.log('🔄 检测到其他设备的更新，已自动同步');
-      }
-    }
-  } catch (e) { /* silent fail */ }
-}
+// Poll cloud every 5 seconds
+setInterval(() => { pollCloud(); }, 5000);
 
-// Start unified polling every 5 seconds
-setInterval(() => { if (isCloudMode) pollCloud(); else if (isServerMode) pollServer(); }, 5000);
-
-// Unified save — priority: Cloud > Server > Local
+// Unified save — always cloud via Supabase
 function saveToStorage(data) {
-  if (isCloudMode) { saveToCloud(data); flashSyncIndicator('☁ 云端已保存'); return; }
-  if (isServerMode) { saveDataToServer(data); flashSyncIndicator('☁ 已保存'); return; }
-  saveDataLocal(data);
+  saveToCloud(data);
+  flashSyncIndicator('☁ 云端已保存');
 }
 
 function getDefaultData() {
@@ -1054,87 +961,40 @@ function seedDemoData() {
 let appData = getDefaultData(); // Placeholder, replaced in init()
 
 async function initApp() {
-  if (isCloudMode) {
-    // ── 云端模式：从 Supabase 加载 ──
-    let cloudData = await loadFromCloud();
-    if (cloudData && cloudData.students && cloudData.students.length > 0) {
-      appData = cloudData;
-      ensureConsistency();
-      cloudOnline = true;
-      flashSyncIndicator('☁ 云端协作模式');
-      console.log(`☁ 已从云端加载 (${appData.students.length} 名学生)`);
-    } else if (cloudData === null && !cloudOnline) {
-      // Cloud unreachable, use localStorage
-      const local = loadDataLocal();
-      if (local && local.students && local.students.length > 0) {
-        appData = local;
-        flashSyncIndicator('⚠ 云端离线，本地数据');
-        console.log('⚠ 云端不可达，使用本地数据');
-      } else {
-        appData = getDefaultData();
-        flashSyncIndicator('⚠ 离线模式');
-      }
+  // ── 云端模式：从 Supabase 加载 ──
+  let cloudData = await loadFromCloud();
+  if (cloudData && cloudData.students && cloudData.students.length > 0) {
+    appData = cloudData;
+    ensureConsistency();
+    cloudOnline = true;
+    flashSyncIndicator('☁ 云端协作模式');
+    console.log('☁ 已从云端加载 (' + appData.students.length + ' 名学生)');
+  } else if (cloudData === null && !cloudOnline) {
+    // Cloud unreachable, use localStorage
+    const local = loadDataLocal();
+    if (local && local.students && local.students.length > 0) {
+      appData = local;
+      flashSyncIndicator('⚠ 云端离线，本地数据');
     } else {
-      // 云端无数据 → 尝试从本地迁移
-      let existingData = null;
-      if (isServerMode) existingData = await loadDataFromServer();
-      if (!existingData || !existingData.students || existingData.students.length === 0) {
-        existingData = loadDataLocal();
-      }
-      if (existingData && existingData.students && existingData.students.length > 0) {
-        console.log('☁ 云端无数据，将本地数据迁移到云端...');
-        appData = existingData;
-        await saveToCloud(appData);
-        flashSyncIndicator('☁ 已有数据已迁移至云端');
-      } else {
-        console.log('☁ 首次使用，初始化数据...');
-        appData = getDefaultData();
-        seedDemoData();
-        await saveToCloud(appData);
-        flashSyncIndicator('☁ 云端 · 已初始化');
-      }
-    }
-  } else if (isServerMode) {
-    // ── 服务器模式：从共享 JSON 文件加载 ──
-    let serverData = await loadDataFromServer();
-    if (serverData && serverData.students && serverData.students.length > 0) {
-      appData = serverData;
-      flashSyncIndicator('☁ 协作模式');
-      console.log(`📡 已从服务器加载共享数据 (${appData.students.length} 名学生)`);
-    } else {
-      await new Promise(r => setTimeout(r, 500));
-      serverData = await loadDataFromServer();
-      if (serverData && serverData.students && serverData.students.length > 0) {
-        appData = serverData;
-        flashSyncIndicator('☁ 协作模式');
-        console.log('📡 重试后成功加载共享数据');
-      } else {
-        console.log('📡 服务器无数据，执行首次初始化...');
-        appData = getDefaultData();
-        seedDemoData();
-        await saveDataToServer(appData);
-        flashSyncIndicator('☁ 协作模式 · 已初始化');
-      }
+      appData = getDefaultData();
+      flashSyncIndicator('⚠ 离线模式');
     }
   } else {
-    // ── 本地模式：从 localStorage 加载 ──
-    appData = loadDataLocal() || getDefaultData();
-    const isFirstTime = !localStorage.getItem(STORAGE_KEY);
-    if (isFirstTime) {
-      seedDemoData();
-    } else if (!loadDataLocal()) {
+    // Cloud reachable but empty → seed data
+    const local = loadDataLocal();
+    if (local && local.students && local.students.length > 0) {
+      appData = local;
+      await saveToCloud(appData);
+      flashSyncIndicator('☁ 本地数据已迁移至云端');
+    } else {
       appData = getDefaultData();
-      saveDataLocal(appData);
-      setTimeout(() => showToast('🎉 学生名单已更新为八6班最新名单'), 500);
+      seedDemoData();
+      await saveToCloud(appData);
+      flashSyncIndicator('☁ 云端 · 已初始化');
     }
   }
   // Post-init
   selectedStudentId = appData.students.length > 0 ? appData.students[0].id : null;
-
-  // Warn if file:// protocol with cloud sync (Safari CORS limitation)
-  if (isFileProtocol && isCloudMode) {
-    document.getElementById('fileWarn').style.display = 'inline';
-  }
 
   renderPointsPage();
 }
@@ -2163,7 +2023,7 @@ document.getElementById('btnTestCloud').addEventListener('click', async () => {
 });
 
 document.getElementById('btnClearCloud').addEventListener('click', () => {
-  if (!confirm('确定要清除云端配置吗？数据不会丢失，将恢复为本地/' + (isServerMode ? '服务器' : '浏览器') + '存储。')) return;
+  if (!confirm('确定要清除云端配置吗？数据不会丢失，将恢复为本地浏览器存储。')) return;
   localStorage.removeItem('sb_url');
   localStorage.removeItem('sb_key');
   document.getElementById('sbUrl').value = '';
