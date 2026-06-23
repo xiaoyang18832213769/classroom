@@ -74,7 +74,7 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
 .stat-value{font-size:1.4rem;font-weight:600;font-family:var(--font-serif)}
 
 /* Charts */
-.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:2rem}
+.charts-row{display:grid;grid-template-columns:1fr;gap:1.25rem;margin-bottom:2rem}
 .chart-card{background:var(--card-bg);border-radius:var(--radius-lg);padding:1.5rem;box-shadow:var(--shadow)}
 .chart-title{font-family:var(--font-serif);font-size:1rem;font-weight:600;margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem}
 .chart-title::before{content:'';width:4px;height:18px;border-radius:2px;background:var(--primary)}
@@ -467,7 +467,9 @@ function renderCheckinAlert() {
   const unchecked = [];
   Object.keys(state.classes).forEach(cn => {
     const recs = (state.records[cn]||{})[currentWeek]||{};
-    if (!recs[todayDayName]) {
+    const dr = recs[todayDayName];
+    // 无记录 或 (实到=0 且 无未到名单) → 视为未签到（含重置后的初始状态）
+    if (!dr || (dr.actual === 0 && (!dr.absent || dr.absent.length === 0))) {
       unchecked.push(cn);
     }
   });
@@ -539,7 +541,7 @@ function renderWeekPage() {
 
   // Ranking bar
   document.getElementById('rankingBar').innerHTML = `
-    <span style="font-family:var(--font-serif);font-weight:600;margin-right:0.5rem;">🏆 出勤排名</span>
+    <span style="font-family:var(--font-serif);font-weight:600;margin-right:0.5rem;">🏆 本周累计出勤排名</span>
     ${classRates.map((c,i) => {
       const rateCls = c.rate>=100?'good':c.rate>=90?'warn':'bad';
       return `<div class="ranking-item"><span style="font-weight:700;min-width:1.2rem;">${i+1}</span><span class="ranking-name">${c.name}</span><span class="ranking-rate ${rateCls}">${c.rate}%</span></div>`;
@@ -701,20 +703,9 @@ document.getElementById('editClassConfirm').addEventListener('click',()=>{
 // ── Charts ──
 function renderCharts(classRates) {
   document.getElementById('chartsRow').innerHTML=`
-    <div class="chart-card"><div class="chart-title">各班出勤率排名</div><div class="chart-wrap"><canvas id="rankCanvas"></canvas></div></div>
-    <div class="chart-card"><div class="chart-title">本日各班出勤率（${DAY_NAMES[new Date().getDay()]}）</div><div class="chart-wrap"><canvas id="trendCanvas"></canvas></div></div>
+    <div class="chart-card" style="grid-column:1/-1"><div class="chart-title">今日出勤排名（${DAY_NAMES[new Date().getDay()]}）</div><div class="chart-wrap"><canvas id="todayCanvas"></canvas></div></div>
   `;
   setTimeout(()=>{
-    // Rank chart
-    const rc=document.getElementById('rankCanvas');if(!rc)return;
-    if(rankChart)rankChart.destroy();
-    rankChart=new Chart(rc.getContext('2d'),{
-      type:'bar',data:{labels:classRates.map(c=>c.name),datasets:[{label:'出勤率 %',data:classRates.map(c=>c.rate),
-        backgroundColor:classRates.map((_,i)=>['rgba(66,102,131,0.75)','rgba(134,149,84,0.75)','rgba(155,62,70,0.65)','rgba(199,130,58,0.75)'][i%4]),
-        borderRadius:6}]},
-      options:{responsive:true,indexAxis:'y',plugins:{legend:{display:false}},
-        scales:{x:{min:80,max:100,grid:{color:'#f0ebe2'},ticks:{callback:v=>v+'%',font:{size:10},color:'#8c8880'}},y:{grid:{display:false},ticks:{font:{family:"'Noto Sans SC',sans-serif",size:11},color:'#3d3d3d'}}}}
-    });
     // Today's per-class attendance rate chart
     const todayDayName = DAY_NAMES[new Date().getDay()];
     const todayRates = Object.keys(state.classes).map(cn => {
@@ -723,7 +714,10 @@ function renderCharts(classRates) {
       const rate = dr ? (dr.expected>0 ? Math.round(dr.actual/dr.expected*100) : 100) : null;
       return {name:cn, rate:rate};
     }).filter(c => c.rate !== null).sort((a,b) => b.rate - a.rate);
-    new Chart(document.getElementById('trendCanvas').getContext('2d'),{
+    const canvas = document.getElementById('todayCanvas');
+    if(!canvas) return;
+    if(rankChart) rankChart.destroy();
+    rankChart = new Chart(canvas.getContext('2d'),{
       type:'bar',data:{labels:todayRates.map(c=>c.name),datasets:[{label:'今日出勤率 %',data:todayRates.map(c=>c.rate),
         backgroundColor:todayRates.map(c=>c.rate>=100?'rgba(91,140,90,0.7)':c.rate>=90?'rgba(199,130,58,0.7)':'rgba(192,80,77,0.7)'),
         borderRadius:4}]},
