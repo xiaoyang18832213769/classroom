@@ -339,14 +339,21 @@ async function loadCloud() {
 }
 async function saveCloud(data) {
   try{
-    let res=await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.1`,{
-      method:'PATCH',headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json'},
-      body:JSON.stringify({payload:data,updated_at:new Date().toISOString()})
+    // 主路径：POST + merge-duplicates（表空则创建，有则更新，不会像PATCH那样在空表静默失败）
+    let res=await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`,{
+      method:'POST',
+      headers:{
+        'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,
+        'Content-Type':'application/json','Prefer':'resolution=merge-duplicates'
+      },
+      body:JSON.stringify({id:1,payload:data,updated_at:new Date().toISOString()})
     });
     if(!res.ok){
-      res=await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`,{
-        method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json'},
-        body:JSON.stringify({id:1,payload:data,updated_at:new Date().toISOString()})
+      // 备用：PATCH 已有行
+      res=await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.1`,{
+        method:'PATCH',
+        headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json'},
+        body:JSON.stringify({payload:data,updated_at:new Date().toISOString()})
       });
     }
     if(res.ok){
@@ -473,7 +480,7 @@ function renderWeekPage() {
       const dateStr = dates[i].toISOString().slice(0,10);
       const isToday = dateStr === today;
       const isWeekend = i===6||i===0;
-      const dr = recs[dk] || { expected: cls.count, actual: cls.count, absent: [] };
+      const dr = recs[dk] || { expected: cls.count, actual: 0, absent: [] };
       e += dr.expected; a += dr.actual;
       const rate = dr.expected>0 ? Math.round(dr.actual/dr.expected*100) : 100;
       const rc = rate>=100?'good':rate>=90?'warn':'bad';
@@ -564,7 +571,7 @@ document.getElementById('absentConfirm').addEventListener('click',()=>{
   if(!state.records[cn][currentWeek][dk]){
     const dates=getWeekDates(currentWeek);
     const cls=state.classes[cn];
-    state.records[cn][currentWeek][dk]={date:dates[dayIdx].toISOString().slice(0,10),expected:cls.count,actual:cls.count,absent:[]};
+    state.records[cn][currentWeek][dk]={date:dates[dayIdx].toISOString().slice(0,10),expected:cls.count,actual:0,absent:[]};
   }
   const dr=state.records[cn][currentWeek][dk];
   if(dr.absent.some(a=>a.name===name)){showToast('已登记');return;}
