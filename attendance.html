@@ -273,8 +273,26 @@ ALTER TABLE attendance_state DISABLE ROW LEVEL SECURITY;</pre>
       </details>
     </div>
     <div class="manage-card">
-      <div class="manage-title">现有班级</div>
+      <div class="manage-title">现有班级 <button class="btn-sm primary" id="btnBatchEdit" style="margin-left:1rem;">📝 批量编辑</button></div>
       <div id="classList"></div>
+      <div id="batchEditArea" style="display:none;margin-top:1rem;">
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.85rem;" id="batchEditTable">
+            <thead><tr>
+              <th style="padding:0.4rem;border-bottom:1px solid var(--border);text-align:left;">班级</th>
+              <th style="padding:0.4rem;border-bottom:1px solid var(--border);">班序号</th>
+              <th style="padding:0.4rem;border-bottom:1px solid var(--border);">班主任</th>
+              <th style="padding:0.4rem;border-bottom:1px solid var(--border);">应到人数</th>
+              <th style="padding:0.4rem;border-bottom:1px solid var(--border);">备注</th>
+            </tr></thead>
+            <tbody id="batchEditBody"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:0.75rem;display:flex;gap:0.75rem;">
+          <button class="btn-sm primary" id="btnSaveBatch">💾 保存全部</button>
+          <button class="btn-sm" id="btnCancelBatch">取消</button>
+        </div>
+      </div>
     </div>
   </div>
 </main>
@@ -796,7 +814,10 @@ function renderHistoryPage() {
       const cls = state.classes[cn];
       Object.values(state.records[cn] || {}).forEach(wr => {
         Object.entries(wr).forEach(([dk, dr]) => {
-          if (dr.date === ds) { totalExp += dr.expected; totalAct += dr.actual; classCount++; }
+          // 只统计有实际签到数据的记录（实到>0 或 有未到名单）
+          if (dr.date === ds && (dr.actual > 0 || (dr.absent && dr.absent.length > 0))) {
+            totalExp += dr.expected; totalAct += dr.actual; classCount++;
+          }
         });
       });
     });
@@ -842,7 +863,7 @@ function onCalendarDayClick(ds) {
     const cls = state.classes[cn];
     Object.values(state.records[cn] || {}).forEach(wr => {
       Object.entries(wr).forEach(([dk, dr]) => {
-        if (dr.date === ds) {
+        if (dr.date === ds && (dr.actual > 0 || (dr.absent && dr.absent.length > 0))) {
           if (!detail[cn]) detail[cn] = { expected: 0, actual: 0, absent: [] };
           detail[cn].expected += dr.expected;
           detail[cn].actual += dr.actual;
@@ -923,6 +944,48 @@ document.getElementById('btnAddClass').addEventListener('click',()=>{
   document.getElementById('addTeacher').value='';
   renderManagePage();
   showToast(`已添加 ${cn}`);
+});
+
+// ── Batch Edit ──
+document.getElementById('btnBatchEdit').addEventListener('click', () => {
+  const area = document.getElementById('batchEditArea');
+  const isVisible = area.style.display !== 'none';
+  area.style.display = isVisible ? 'none' : 'block';
+  document.getElementById('btnBatchEdit').textContent = isVisible ? '📝 批量编辑' : '📝 收起编辑';
+  if (!isVisible) {
+    const tbody = document.getElementById('batchEditBody');
+    tbody.innerHTML = Object.entries(state.classes).map(([cn, cls]) => `
+      <tr>
+        <td style="padding:0.3rem;font-weight:500;">${cn}</td>
+        <td style="padding:0.3rem;"><input class="field-input" data-class="${cn}" data-field="no" value="${cls.no||''}" style="width:100%;"></td>
+        <td style="padding:0.3rem;"><input class="field-input" data-class="${cn}" data-field="teacher" value="${cls.teacher||''}" style="width:100%;"></td>
+        <td style="padding:0.3rem;"><input class="field-input" data-class="${cn}" data-field="count" type="number" min="1" max="99" value="${cls.count||45}" style="width:100%;"></td>
+        <td style="padding:0.3rem;"><input class="field-input" data-class="${cn}" data-field="note" value="${cls.note||''}" style="width:100%;"></td>
+      </tr>
+    `).join('');
+  }
+});
+
+document.getElementById('btnSaveBatch').addEventListener('click', () => {
+  const inputs = document.querySelectorAll('#batchEditBody .field-input');
+  inputs.forEach(inp => {
+    const cn = inp.dataset.class;
+    const field = inp.dataset.field;
+    const val = field === 'count' ? parseInt(inp.value) || 45 : inp.value.trim();
+    if (state.classes[cn]) {
+      state.classes[cn][field] = val;
+    }
+  });
+  saveState();
+  document.getElementById('batchEditArea').style.display = 'none';
+  document.getElementById('btnBatchEdit').textContent = '📝 批量编辑';
+  renderManagePage();
+  showToast('✅ 班级信息已批量更新');
+});
+
+document.getElementById('btnCancelBatch').addEventListener('click', () => {
+  document.getElementById('batchEditArea').style.display = 'none';
+  document.getElementById('btnBatchEdit').textContent = '📝 批量编辑';
 });
 
 // Cloud panel buttons
