@@ -775,6 +775,34 @@ let cloudRowId = null; // Cache the row ID for direct PATCH
 
 async function saveToCloud(data) {
   const cfg = getCloudConfig(); if (!cfg || !data.students || data.students.length === 0) return;
+
+  // ── 保护：检查云端是否有更新的数据，防止旧数据覆盖新数据 ──
+  if (cloudMtime > 0) {
+    try {
+      const checkRes = await fetch(`${cfg.url}/rest/v1/classroom_data?id=eq.1&select=updated_at`, {
+        headers: { 'apikey': cfg.key, 'Authorization': `Bearer ${cfg.key}` }
+      });
+      if (checkRes.ok) {
+        const rows = await checkRes.json();
+        if (rows && rows.length > 0) {
+          const serverTs = new Date(rows[0].updated_at).getTime();
+          if (serverTs > cloudMtime) {
+            // 云端有我们没有的更新 → 先拉取最新数据，避免覆盖他人修改
+            const fresh = await loadFromCloud();
+            if (fresh) {
+              appData = fresh;
+              ensureConsistency();
+              cloudMtime = serverTs;
+              refreshAll();
+              flashSyncIndicator('🔄 检测到云端更新，已同步最新数据');
+              return; // 丢弃本次保存，UI已更新为最新数据
+            }
+          }
+        }
+      }
+    } catch(e) { /* 检测失败不阻塞保存 */ }
+  }
+
   try {
     data._version = DATA_VERSION;
     const body = JSON.stringify({ payload: data, updated_at: new Date().toISOString() });
@@ -830,7 +858,7 @@ async function pollCloud() {
     const rows = await res.json();
     if (rows && rows.length > 0) {
       const ts = new Date(rows[0].updated_at).getTime();
-      if (ts > cloudMtime && cloudMtime > 0) {
+      if (ts > cloudMtime) {
         const data = await loadFromCloud();
         if (data) { appData = data; ensureConsistency(); cloudMtime = ts; refreshAll(); flashSyncIndicator('🔄 已同步云端更新'); }
       }

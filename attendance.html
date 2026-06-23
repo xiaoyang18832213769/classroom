@@ -338,6 +338,33 @@ async function loadCloud() {
   return null;
 }
 async function saveCloud(data) {
+  // ── 保护：检查云端是否有更新的数据，防止旧数据覆盖新数据 ──
+  if(cloudMtime>0){
+    try{
+      const checkRes=await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.1&select=updated_at`,{
+        headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`}
+      });
+      if(checkRes.ok){
+        const rows=await checkRes.json();
+        if(rows&&rows.length>0){
+          const serverTs=new Date(rows[0].updated_at).getTime();
+          if(serverTs>cloudMtime){
+            // 云端有更新 → 先拉取，丢弃本次保存
+            const fresh=await loadCloud();
+            if(fresh){state=fresh;ensureAllClasses();cloudMtime=serverTs;
+              localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+              const ap=document.querySelector('.page.active');
+              if(ap&&ap.id==='page-week')renderWeekPage();
+              if(ap&&ap.id==='page-history')renderHistoryPage();
+              isCloud=true;updateSyncBadge();updateCloudPanel();
+              showToast('🔄 检测到云端更新，已同步最新数据');}
+            return;
+          }
+        }
+      }
+    }catch(e){/* 检测失败不阻塞保存 */}
+  }
+
   try{
     // 主路径：POST + merge-duplicates（表空则创建，有则更新，不会像PATCH那样在空表静默失败）
     let res=await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`,{
@@ -429,22 +456,21 @@ function renderWeekPage() {
   document.getElementById('weekLabel').textContent = `第${currentWeek.split('-')[1]}周 · ${mon.getMonth()+1}/${mon.getDate()}−${fri.getMonth()+1}/${fri.getDate()}`;
 
   // Overall stats (grade director perspective)
-  let totalAbs=0;
+  let totalAbs=0, totalTracked=0;
   const classRates = [];
   let fullClasses = 0;
   Object.keys(state.classes).forEach(cn => {
     const recs = (state.records[cn]||{})[currentWeek]||{};
     const cls = state.classes[cn];
-    let e=0, a=0;
+    let e=0, a=0, clsAbs=0, clsTracked=0;
     for(let i=1;i<=7;i++){
       const dr = recs[DAY_NAMES[i]];
-      e += dr ? dr.expected : cls.count;
-      a += dr ? dr.actual : cls.count;
-      totalAbs += dr && dr.absent ? dr.absent.length : 0;
+      if(dr){ e += dr.expected; a += dr.actual; clsTracked++; clsAbs += dr.absent ? dr.absent.length : 0; }
     }
-    const rate = e>0 ? Math.round(a/e*100) : 100;
-    classRates.push({name:cn, no:cls.no||'', rate, exp:e, act:a, absent:totalAbs});
-    if(rate >= 100) fullClasses++;
+    totalAbs += clsAbs; totalTracked += clsTracked;
+    const rate = e>0 ? Math.round(a/e*100) : (clsTracked>0 ? 0 : 100);
+    classRates.push({name:cn, no:cls.no||'', rate, exp:e, act:a, absent:clsAbs, tracked:clsTracked});
+    if(clsTracked>0 && rate >= 95) fullClasses++;
   });
   classRates.sort((a,b)=>b.rate-a.rate);
   const allRate = classRates.length>0 ? Math.round(classRates.reduce((s,c)=>s+c.rate,0)/classRates.length) : 100;
@@ -474,19 +500,22 @@ function renderWeekPage() {
     const cls = state.classes[cn];
     const recs = (state.records[cn]||{})[currentWeek]||{};
     const today = new Date().toISOString().slice(0,10);
-    let e=0, a=0;
+    let e=0, a=0, trackedDays=0;
     const dayRows = [1,2,3,4,5,6,0].map(i => { // Mon-Sun
       const dk = DAY_NAMES[i];
       const dateStr = dates[i].toISOString().slice(0,10);
       const isToday = dateStr === today;
       const isWeekend = i===6||i===0;
+      const hasRecord = !!recs[dk];
       const dr = recs[dk] || { expected: cls.count, actual: 0, absent: [] };
-      e += dr.expected; a += dr.actual;
-      const rate = dr.expected>0 ? Math.round(dr.actual/dr.expected*100) : 100;
-      const rc = rate>=100?'good':rate>=90?'warn':'bad';
-      return {i, dk, dateStr, isToday, isWeekend, dr, rate, rc};
+      // 只统计有记录的天的出勤率
+      if(hasRecord){ e += dr.expected; a += dr.actual; trackedDays++; }
+      const rate = hasRecord ? (dr.expected>0 ? Math.round(dr.actual/dr.expected*100) : 100) : null;
+      const rc = rate===null ? '' : (rate>=100?'good':rate>=90?'warn':'bad');
+      return {i, dk, dateStr, isToday, isWeekend, hasRecord, dr, rate, rc};
     });
-    const wkRate = e>0 ? Math.round(a/e*100):100;
+    const wkRate = e>0 ? Math.round(a/e*100) : (trackedDays>0 ? 0 : 100);
+    const rateLabel = trackedDays>0 ? wkRate+'%' : '--';
     const rCls = wkRate>=100?'good':wkRate>=90?'warn':'bad';
     return `
       <div class="class-card">
@@ -496,7 +525,7 @@ function renderWeekPage() {
             <div class="class-name">${cn}</div>
             <div class="class-teacher">${cls.teacher||'班主任未填写'}</div>
           </div>
-          <div class="class-rate-badge ${rCls}">${wkRate}%<small>本周出勤率</small></div>
+          <div class="class-rate-badge ${rCls}">${rateLabel}<small>本周出勤 · ${trackedDays}/7天</small></div>
           <button class="btn-sm" onclick="openEditClass('${cn}')" style="margin-left:0.5rem;" title="编辑班级信息">✎</button>
         </div>
         <div class="day-rows">
@@ -508,7 +537,7 @@ function renderWeekPage() {
                 <input class="field-input" id="exp_${cn}_${dr.i}" type="number" min="0" max="99" value="${dr.dr.expected}" onchange="autoSaveDay('${cn}',${dr.i})">
                 <span class="field-label">实到</span>
                 <input class="field-input" id="act_${cn}_${dr.i}" type="number" min="0" max="99" value="${dr.dr.actual}" onchange="autoSaveDay('${cn}',${dr.i})">
-                <span class="day-rate-mini ${dr.rc}">${dr.rate}%</span>
+                <span class="day-rate-mini ${dr.rc}">${dr.hasRecord ? dr.rate+'%' : '--'}</span>
                 <span class="absent-mini">未到<span>${dr.dr.absent?dr.dr.absent.length:0}</span>人</span>
                 <button class="btn-add-absent" onclick="openAbsent('${cn}',${dr.i})">+</button>
               </div>
@@ -632,20 +661,20 @@ function renderCharts(classRates) {
     // Daily grade trend chart
     const dailyRates = [];
     for(let i=1;i<=7;i++){
-      let e=0,a=0;
+      let e=0,a=0,has=0;
       Object.keys(state.classes).forEach(cn=>{
         const cls=state.classes[cn];
         const dr=((state.records[cn]||{})[currentWeek]||{})[DAY_NAMES[i]];
-        e+= dr ? dr.expected : cls.count;
-        a+= dr ? dr.actual : cls.count;
+        if(dr){ e+=dr.expected; a+=dr.actual; has++; }
       });
-      dailyRates.push({label:DAY_NAMES[i], rate:e>0?Math.round(a/e*100):100});
+      dailyRates.push({label:DAY_NAMES[i], rate:has>0?(e>0?Math.round(a/e*100):0):null});
     }
+    const validRates=dailyRates.filter(d=>d.rate!==null).map(d=>d.rate);
     new Chart(document.getElementById('trendCanvas').getContext('2d'),{
       type:'line',data:{labels:dailyRates.map(d=>d.label),datasets:[{label:'年级出勤率 %',data:dailyRates.map(d=>d.rate),
-        borderColor:'#426683',backgroundColor:'rgba(66,102,131,0.08)',borderWidth:2.5,fill:true,pointRadius:5,pointBackgroundColor:'#426683',tension:0.35}]},
+        borderColor:'#426683',backgroundColor:'rgba(66,102,131,0.08)',borderWidth:2.5,fill:true,pointRadius:5,pointBackgroundColor:'#426683',tension:0.35,spanGaps:false}]},
       options:{responsive:true,plugins:{legend:{display:false}},
-        scales:{y:{min:Math.max(60,Math.min(...dailyRates.map(d=>d.rate))-10),max:100,grid:{color:'#f0ebe2'},ticks:{callback:v=>v+'%',font:{size:10},color:'#8c8880'}},x:{grid:{display:false},ticks:{font:{family:"'Noto Sans SC',sans-serif",size:11},color:'#3d3d3d'}}}}
+        scales:{y:{min:validRates.length>0?Math.max(60,Math.min(...validRates)-10):80,max:100,grid:{color:'#f0ebe2'},ticks:{callback:v=>v+'%',font:{size:10},color:'#8c8880'}},x:{grid:{display:false},ticks:{font:{family:"'Noto Sans SC',sans-serif",size:11},color:'#3d3d3d'}}}}
     });
   },100);
 }
