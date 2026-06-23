@@ -67,7 +67,7 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
 .ranking-rate.good{color:var(--success)}.ranking-rate.warn{color:var(--accent3)}.ranking-rate.bad{color:var(--danger)}
 
 /* Stats */
-.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem}
 .stat-card{background:var(--card-bg);border-radius:var(--radius);padding:1rem 1.25rem;box-shadow:var(--shadow);display:flex;align-items:center;gap:0.75rem}
 .stat-icon{width:44px;height:44px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0}
 .stat-label{font-size:0.82rem;color:var(--text-light)}
@@ -164,7 +164,7 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
   .nav{padding:0 1rem}.nav-inner{flex-wrap:wrap;height:auto;padding:0.75rem 0;gap:0.5rem}
   .class-cards{grid-template-columns:1fr}
   .charts-row{grid-template-columns:1fr}
-  .stats-row{grid-template-columns:repeat(2,1fr)}
+  .stats-row{grid-template-columns:1fr}
   .main{padding:1rem}
 }
 </style>
@@ -492,6 +492,10 @@ function renderWeekPage() {
   let totalAbs=0, totalTracked=0;
   const classRates = [];
   let fullClasses = 0;
+  // Collect today's absent students with reasons
+  const todayDayName = DAY_NAMES[new Date().getDay()];
+  const todayAbsentList = [];
+
   Object.keys(state.classes).forEach(cn => {
     const recs = (state.records[cn]||{})[currentWeek]||{};
     const cls = state.classes[cn];
@@ -504,16 +508,24 @@ function renderWeekPage() {
     const rate = e>0 ? Math.round(a/e*100) : (clsTracked>0 ? 0 : 100);
     classRates.push({name:cn, no:cls.no||'', rate, exp:e, act:a, absent:clsAbs, tracked:clsTracked});
     if(clsTracked>0 && rate >= 95) fullClasses++;
+    // 收集今日未到
+    const todayDr = recs[todayDayName];
+    if(todayDr && todayDr.absent){
+      todayDr.absent.forEach(a => { todayAbsentList.push({className:cn, name:a.name, reason:a.reason}); });
+    }
   });
   classRates.sort((a,b)=>b.rate-a.rate);
   const allRate = classRates.length>0 ? Math.round(classRates.reduce((s,c)=>s+c.rate,0)/classRates.length) : 100;
-  const worst = classRates[classRates.length-1] || {name:'-',rate:100};
+
+  // Stats cards: 全勤 → 今日未到详情 → 平均出勤率
+  const absentHTML = todayAbsentList.length === 0
+    ? '<div style="color:var(--success);font-size:0.9rem;">✅ 今日无未到学生</div>'
+    : todayAbsentList.map(a => `<div style="font-size:0.82rem;padding:0.15rem 0;border-bottom:1px solid var(--border-light);"><b>${a.name}</b> · ${a.reason}<span style="color:var(--text-lighter);font-size:0.75rem;margin-left:0.5rem;">${a.className}</span></div>`).join('');
 
   document.getElementById('weekStats').innerHTML = `
-    <div class="stat-card"><div class="stat-icon" style="background:#f0ebe0">📊</div><div><div class="stat-label">年级平均出勤率</div><div class="stat-value">${allRate}%</div></div></div>
-    <div class="stat-card"><div class="stat-icon" style="background:var(--success-bg)">🏅</div><div><div class="stat-label">全勤班级数</div><div class="stat-value">${fullClasses}<span style="font-size:0.9rem;font-weight:400;color:var(--text-light);">/${classRates.length}班</span></div></div></div>
-    <div class="stat-card"><div class="stat-icon" style="background:var(--danger-bg)">⚠️</div><div><div class="stat-label">未到总人次</div><div class="stat-value">${totalAbs}</div></div></div>
-    <div class="stat-card"><div class="stat-icon" style="background:#f0edf4">🔍</div><div><div class="stat-label">需关注班级</div><div class="stat-value" style="font-size:1.1rem;">${worst.name}<span style="font-size:0.85rem;font-weight:400;color:var(--text-light);"> ${worst.rate}%</span></div></div></div>
+    <div class="stat-card" style="grid-row:1"><div class="stat-icon" style="background:var(--success-bg)">🏅</div><div><div class="stat-label">全勤班级数</div><div class="stat-value">${fullClasses}<span style="font-size:0.9rem;font-weight:400;color:var(--text-light);">/${classRates.length}班</span></div></div></div>
+    <div class="stat-card" style="grid-row:1;grid-column:2/4"><div class="stat-icon" style="background:var(--danger-bg)">📋</div><div style="flex:1;max-height:80px;overflow-y:auto;"><div class="stat-label">今日未到详情（${todayDayName}）</div>${absentHTML}</div></div>
+    <div class="stat-card" style="grid-row:2"><div class="stat-icon" style="background:#f0ebe0">📊</div><div><div class="stat-label">年级平均出勤率</div><div class="stat-value">${allRate}%</div></div></div>
   `;
 
   // Ranking bar
