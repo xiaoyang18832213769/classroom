@@ -221,6 +221,7 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
         <button class="btn-week" id="btnNextWeek">→</button>
       </div>
       <button class="btn-today" id="btnTodayWeek">本周</button>
+      <button class="btn-sm danger" id="btnResetWeek" title="清除本周所有签到数据">🔄 重置本周</button>
     </div>
     <div class="stats-row" id="weekStats"></div>
     <div class="charts-row" id="chartsRow"></div>
@@ -731,6 +732,15 @@ function renderCharts(classRates) {
 document.getElementById('btnPrevWeek').addEventListener('click',()=>{const d=getWeekDates(currentWeek)[1];d.setDate(d.getDate()-7);currentWeek=getWeekKey(d);renderWeekPage();});
 document.getElementById('btnNextWeek').addEventListener('click',()=>{const d=getWeekDates(currentWeek)[1];d.setDate(d.getDate()+7);currentWeek=getWeekKey(d);renderWeekPage();});
 document.getElementById('btnTodayWeek').addEventListener('click',()=>{currentWeek=getThisWeek();renderWeekPage();});
+document.getElementById('btnResetWeek').addEventListener('click',()=>{
+  if(!confirm(`确定要清除第${currentWeek.split('-')[1]}周所有班级的签到数据吗？\n此操作不可恢复，建议先确认数据已备份。`))return;
+  Object.keys(state.records).forEach(cn => {
+    if(state.records[cn][currentWeek]) delete state.records[cn][currentWeek];
+  });
+  saveState();
+  renderWeekPage();
+  showToast('🔄 本周签到数据已重置');
+});
 document.querySelectorAll('.nav-tab').forEach(t=>{t.addEventListener('click',()=>{
   document.querySelectorAll('.nav-tab').forEach(x=>x.classList.remove('active'));
   t.classList.add('active');
