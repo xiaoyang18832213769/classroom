@@ -81,6 +81,12 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
 .chart-wrap canvas{max-height:320px}
 
 /* Class cards */
+.checkin-alert{display:flex;align-items:center;gap:0.75rem;padding:1rem 1.5rem;border-radius:var(--radius-lg);margin-bottom:1.5rem;flex-wrap:wrap}
+.checkin-alert.ok{background:#edf4ed;border:1px solid #c8dcc8}
+.checkin-alert.warn{background:#fef8f0;border:1px solid #f0d8b0}
+.checkin-alert .alert-icon{font-size:1.3rem;flex-shrink:0}
+.checkin-alert .alert-text{font-size:0.9rem;font-weight:500;flex:1}
+.checkin-alert .alert-text .cls-tag{display:inline-block;margin:2px 4px;padding:0.2rem 0.6rem;background:white;border-radius:100px;font-size:0.82rem;font-weight:600;color:var(--danger);border:1px solid var(--danger-bg)}
 .class-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:1.5rem;margin-bottom:2rem}
 .class-card{background:var(--card-bg);border-radius:var(--radius-lg);padding:1.75rem;box-shadow:var(--shadow);transition:var(--transition);border:1px solid transparent}
 .class-card:hover{box-shadow:var(--shadow-md);border-color:var(--border-light)}
@@ -219,6 +225,7 @@ body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-he
     <div class="stats-row" id="weekStats"></div>
     <div class="charts-row" id="chartsRow"></div>
     <div class="ranking-bar" id="rankingBar"></div>
+    <div class="checkin-alert" id="checkinAlert"></div>
     <div class="class-cards" id="classCards"></div>
   </div>
 
@@ -450,6 +457,32 @@ function showToast(m) {
 /* ================================================================
    WEEK PAGE
    ================================================================ */
+function renderCheckinAlert() {
+  const today = new Date();
+  const todayDayName = DAY_NAMES[today.getDay()]; // 周日=0 → '周日'
+  const alert = document.getElementById('checkinAlert');
+  if (!alert) return;
+
+  const unchecked = [];
+  Object.keys(state.classes).forEach(cn => {
+    const recs = (state.records[cn]||{})[currentWeek]||{};
+    if (!recs[todayDayName]) {
+      unchecked.push(cn);
+    }
+  });
+
+  if (unchecked.length === 0) {
+    alert.className = 'checkin-alert ok';
+    alert.innerHTML = `<span class="alert-icon">✅</span><span class="alert-text">今日所有班级均已签到（${todayDayName}）</span>`;
+  } else {
+    alert.className = 'checkin-alert warn';
+    alert.innerHTML = `<span class="alert-icon">⚠️</span><span class="alert-text">
+      今日（${todayDayName}）<b>${unchecked.length}</b> 个班未签到：
+      ${unchecked.map(cn => `<span class="cls-tag">${cn}</span>`).join('')}
+    </span>`;
+  }
+}
+
 function renderWeekPage() {
   const dates = getWeekDates(currentWeek);
   const mon=dates[1], fri=dates[5];
@@ -494,6 +527,9 @@ function renderWeekPage() {
 
   // Charts
   renderCharts(classRates);
+
+  // ── 今日未签到提醒 ──
+  renderCheckinAlert();
 
   // Class cards
   document.getElementById('classCards').innerHTML = Object.keys(state.classes).map(cn => {
