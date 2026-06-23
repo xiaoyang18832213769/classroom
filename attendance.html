@@ -329,7 +329,11 @@ async function loadCloud() {
     });
     if(!res.ok)return null;
     const rows=await res.json();
-    if(rows&&rows.length>0&&rows[0].payload){cloudMtime=Date.now();return rows[0].payload;}
+    if(rows&&rows.length>0&&rows[0].payload){
+      // 使用服务器时间戳，避免浏览器时钟偏差导致跨设备同步失效
+      cloudMtime=rows[0].updated_at?new Date(rows[0].updated_at).getTime():Date.now();
+      return rows[0].payload;
+    }
   }catch(e){}
   return null;
 }
@@ -346,7 +350,8 @@ async function saveCloud(data) {
       });
     }
     if(res.ok){
-      cloudMtime=Date.now();
+      // 不修改 cloudMtime，保持 loadCloud 时记录的服务器时间戳
+      // 这样其他设备保存后，服务器 updated_at 变化，下次 poll 就能检测到
       if(!isCloud){ isCloud=true; updateSyncBadge(); }
     } else {
       isCloud = false;
@@ -909,7 +914,7 @@ setInterval(async()=>{
     const rows=await res.json();
     if(rows&&rows.length>0){
       const ts=new Date(rows[0].updated_at).getTime();
-      if(ts>cloudMtime+1000){
+      if(ts>cloudMtime){
         const data=await loadCloud();
         if(data){
           state=data; ensureAllClasses(); cloudMtime=ts;
