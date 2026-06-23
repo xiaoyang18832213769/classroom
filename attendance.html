@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>班级签到登记</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg:#f5f0e8;--card-bg:#faf8f5;--text:#3d3d3d;--text-light:#8c8880;--text-lighter:#b5b0a8;
+  --primary:#426683;--primary-bg:#e8eef3;
+  --accent1:#869554;--accent1-bg:#f2f4ec;
+  --accent2:#9b3e46;--accent2-bg:#f7edee;
+  --accent3:#c7823a;--accent3-bg:#faf3ea;
+  --success:#5b8c5a;--success-bg:#edf4ed;
+  --danger:#c0504d;--danger-bg:#f8eeee;
+  --border:#e5ddd0;--border-light:#f0ebe2;
+  --shadow:0 1px 3px rgba(0,0,0,0.06);--shadow-md:0 4px 16px rgba(0,0,0,0.08);--shadow-lg:0 12px 40px rgba(0,0,0,0.12);
+  --radius:10px;--radius-sm:6px;--radius-lg:16px;
+  --font-serif:'Noto Serif SC','STSong','SimSun',serif;
+  --font-sans:'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif;
+  --transition:0.2s cubic-bezier(0.4,0,0.2,1);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{font-family:var(--font-sans);background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh;-webkit-font-smoothing:antialiased}
+
+/* Nav */
+.nav{position:sticky;top:0;z-index:100;background:rgba(250,248,245,0.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--border-light);padding:0 2rem}
+.nav-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:60px}
+.nav-brand{font-family:var(--font-serif);font-size:1.35rem;font-weight:700;letter-spacing:0.08em}
+.nav-tabs{display:flex;gap:0.25rem}
+.nav-tab{padding:0.5rem 1.25rem;border:none;background:transparent;font-family:var(--font-sans);font-size:0.9rem;color:var(--text-light);cursor:pointer;border-radius:var(--radius-sm);transition:var(--transition);white-space:nowrap}
+.nav-tab:hover{color:var(--text);background:rgba(0,0,0,0.03)}
+.nav-tab.active{color:var(--text);font-weight:500;background:rgba(0,0,0,0.05)}
+
+/* Main */
+.main{max-width:1400px;margin:0 auto;padding:2rem}
+.page{display:none}
+.page.active{display:block;animation:fadeIn 0.3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* Week selector */
+.week-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem}
+.week-selector{display:flex;align-items:center;gap:0.75rem}
+.week-label{font-family:var(--font-serif);font-size:1.2rem;font-weight:600;min-width:11rem;text-align:center}
+.btn-week{width:36px;height:36px;border:1px solid var(--border);background:white;border-radius:50%;cursor:pointer;font-size:1rem;color:var(--text);transition:var(--transition);display:flex;align-items:center;justify-content:center}
+.btn-week:hover{border-color:var(--text-light);background:var(--card-bg)}
+.btn-today{padding:0.4rem 1rem;border:1px solid var(--primary);background:white;color:var(--primary);border-radius:var(--radius-sm);cursor:pointer;font-size:0.85rem;font-family:var(--font-sans);transition:var(--transition)}
+.btn-today:hover{background:var(--primary-bg)}
+.btn-sm{padding:0.35rem 0.85rem;border:1px solid var(--border);background:white;border-radius:var(--radius-sm);font-size:0.8rem;cursor:pointer;font-family:var(--font-sans);color:var(--text-light);transition:var(--transition)}
+.btn-sm:hover{color:var(--text);border-color:var(--text-light)}
+.btn-sm.primary{color:var(--primary);border-color:var(--primary)}
+.btn-sm.primary:hover{background:var(--primary-bg)}
+.btn-sm.danger{color:var(--danger);border-color:var(--danger)}
+.btn-sm.danger:hover{background:var(--danger-bg)}
+
+/* Ranking bar */
+.ranking-bar{display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;padding:1rem 1.5rem;background:var(--card-bg);border-radius:var(--radius-lg);box-shadow:var(--shadow);flex-wrap:wrap}
+.ranking-item{display:flex;align-items:center;gap:0.5rem;font-size:0.9rem}
+.ranking-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.ranking-name{font-weight:500}
+.ranking-rate{font-weight:600;font-family:var(--font-serif)}
+.ranking-rate.good{color:var(--success)}.ranking-rate.warn{color:var(--accent3)}.ranking-rate.bad{color:var(--danger)}
+
+/* Stats */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem}
+.stat-card{background:var(--card-bg);border-radius:var(--radius);padding:1rem 1.25rem;box-shadow:var(--shadow);display:flex;align-items:center;gap:0.75rem}
+.stat-icon{width:44px;height:44px;border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0}
+.stat-label{font-size:0.82rem;color:var(--text-light)}
+.stat-value{font-size:1.4rem;font-weight:600;font-family:var(--font-serif)}
+
+/* Charts */
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:2rem}
+.chart-card{background:var(--card-bg);border-radius:var(--radius-lg);padding:1.5rem;box-shadow:var(--shadow)}
+.chart-title{font-family:var(--font-serif);font-size:1rem;font-weight:600;margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem}
+.chart-title::before{content:'';width:4px;height:18px;border-radius:2px;background:var(--primary)}
+.chart-wrap canvas{max-height:320px}
+
+/* Class cards */
+.class-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:1.5rem;margin-bottom:2rem}
+.class-card{background:var(--card-bg);border-radius:var(--radius-lg);padding:1.75rem;box-shadow:var(--shadow);transition:var(--transition);border:1px solid transparent}
+.class-card:hover{box-shadow:var(--shadow-md);border-color:var(--border-light)}
+.class-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border-light)}
+.class-info{flex:1}
+.class-no{font-size:0.78rem;color:var(--text-lighter)}
+.class-name{font-family:var(--font-serif);font-size:1.2rem;font-weight:600}
+.class-teacher{font-size:0.82rem;color:var(--text-light);margin-top:0.15rem}
+.class-note{font-size:0.8rem;color:var(--text-lighter);font-style:italic;margin-top:0.1rem}
+.class-rate-badge{font-family:var(--font-serif);font-size:1.6rem;font-weight:700;text-align:right}
+.class-rate-badge.good{color:var(--success)}.class-rate-badge.warn{color:var(--accent3)}.class-rate-badge.bad{color:var(--danger)}
+.class-rate-badge small{display:block;font-size:0.7rem;font-weight:400;color:var(--text-light)}
+
+/* Day rows inside class card */
+.day-rows{margin-bottom:0.75rem}
+.day-row{display:grid;grid-template-columns:2.5rem 1fr;align-items:center;padding:0.4rem 0;gap:0.5rem;border-bottom:1px solid var(--border-light)}
+.day-row:last-child{border-bottom:none}
+.day-tag{font-size:0.8rem;font-weight:600;color:var(--text-light)}
+.day-tag.today{color:var(--primary)}
+.day-fields{display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap}
+.field-label{font-size:0.75rem;color:var(--text-lighter)}
+.field-input{width:3rem;padding:0.2rem 0.3rem;border:1px solid var(--border);border-radius:var(--radius-sm);text-align:center;font-size:0.82rem;font-family:var(--font-sans);background:white}
+.field-input:focus{outline:none;border-color:var(--primary)}
+.day-rate-mini{font-weight:600;font-size:0.82rem;min-width:2.5rem;text-align:right}
+.day-rate-mini.good{color:var(--success)}.day-rate-mini.warn{color:var(--accent3)}.day-rate-mini.bad{color:var(--danger)}
+.absent-mini{font-size:0.75rem;color:var(--text-light);margin-left:0.5rem}
+.absent-mini span{color:var(--danger)}
+
+/* Absent tags */
+.absent-tags{display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.4rem}
+.absent-tag{display:inline-flex;align-items:center;gap:0.25rem;padding:0.12rem 0.45rem;background:var(--danger-bg);border-radius:100px;font-size:0.72rem}
+.absent-tag .del{color:var(--danger);cursor:pointer;font-weight:700}
+.absent-tag .del:hover{opacity:0.6}
+.btn-add-absent{padding:0.15rem 0.5rem;border:1px dashed var(--border);background:transparent;border-radius:var(--radius-sm);font-size:0.72rem;cursor:pointer;color:var(--text-light);transition:var(--transition)}
+.btn-add-absent:hover{border-color:var(--danger);color:var(--danger)}
+
+/* Popover */
+.popover-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.2);display:none;align-items:center;justify-content:center}
+.popover-overlay.show{display:flex}
+.popover{background:var(--card-bg);border-radius:var(--radius-lg);padding:1.75rem;box-shadow:var(--shadow-lg);width:380px;max-width:90vw;animation:popIn 0.2s ease}
+@keyframes popIn{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
+.popover-title{font-family:var(--font-serif);font-size:1.05rem;font-weight:600;margin-bottom:1rem;text-align:center}
+.popover-field{margin-bottom:0.75rem}
+.popover-field label{display:block;font-size:0.85rem;color:var(--text-light);margin-bottom:0.25rem}
+.popover-field input,.popover-field select{width:100%;padding:0.55rem 0.75rem;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font-sans);font-size:0.9rem;background:white}
+.popover-field input:focus,.popover-field select:focus{outline:none;border-color:var(--primary)}
+.popover-actions{display:flex;gap:0.75rem;margin-top:1rem}
+.btn{flex:1;padding:0.6rem 1rem;border:none;border-radius:var(--radius-sm);font-size:0.9rem;cursor:pointer;font-family:var(--font-sans);font-weight:500;transition:var(--transition)}
+.btn-primary{background:var(--primary);color:white}.btn-primary:hover{background:#3a5a75}
+.btn-cancel{background:var(--border);color:var(--text)}.btn-cancel:hover{background:#d5cdc0}
+.btn-danger{background:var(--danger);color:white}.btn-danger:hover{background:#a8403d}
+
+/* Manage */
+.manage-card{background:var(--card-bg);border-radius:var(--radius-lg);padding:1.75rem;box-shadow:var(--shadow);margin-bottom:1.5rem}
+.manage-title{font-family:var(--font-serif);font-size:1.1rem;font-weight:600;margin-bottom:1.25rem;display:flex;align-items:center;gap:0.5rem}
+.manage-title::before{content:'';width:4px;height:18px;border-radius:2px;background:var(--primary)}
+.form-row{display:flex;gap:0.75rem;margin-bottom:0.75rem;flex-wrap:wrap;align-items:flex-end}
+.form-field{display:flex;flex-direction:column;gap:0.25rem}
+.form-field label{font-size:0.8rem;color:var(--text-light)}
+.form-field input{width:140px;padding:0.5rem 0.65rem;border:1px solid var(--border);border-radius:var(--radius-sm);font-family:var(--font-sans);font-size:0.9rem;background:white}
+.form-field input:focus{outline:none;border-color:var(--primary)}
+.class-list-item{display:flex;align-items:center;gap:1rem;padding:0.6rem 0.85rem;background:white;border-radius:var(--radius-sm);border:1px solid var(--border-light);margin-bottom:0.4rem}
+.class-list-item .name{flex:1;font-weight:500}
+
+/* Toast */
+.toast-container{position:fixed;top:80px;right:2rem;z-index:300;display:flex;flex-direction:column;gap:0.5rem}
+.toast{background:var(--text);color:white;padding:0.7rem 1.25rem;border-radius:var(--radius-sm);font-size:0.9rem;box-shadow:var(--shadow-md);animation:slideIn 0.3s ease}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+
+/* Calendar */
+.calendar-grid > div:not(:empty) { transition: var(--transition); }
+.calendar-grid > div:not(:empty):hover { filter: brightness(0.95); }
+
+@media(max-width:768px){
+  .nav{padding:0 1rem}.nav-inner{flex-wrap:wrap;height:auto;padding:0.75rem 0;gap:0.5rem}
+  .class-cards{grid-template-columns:1fr}
+  .charts-row{grid-template-columns:1fr}
+  .stats-row{grid-template-columns:repeat(2,1fr)}
+  .main{padding:1rem}
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-brand">班级签到登记</div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-page="week">本周登记</button>
+      <button class="nav-tab" data-page="history">历史记录</button>
+      <button class="nav-tab" data-page="manage">班级管理</button>
+    </div>
+  </div>
+</nav>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Absent popover -->
+<div class="popover-overlay" id="absentOverlay">
+  <div class="popover">
+    <div class="popover-title" id="absentTitle">添加未到学生</div>
+    <div class="popover-field"><label>学生姓名</label><input id="absentStudent" placeholder="手动输入学生姓名" maxlength="10"></div>
+    <div class="popover-field"><label>未到原因</label><input id="absentReason" placeholder="病假、事假..." maxlength="20"></div>
+    <div class="popover-actions">
+      <button class="btn btn-cancel" id="absentCancel">取消</button>
+      <button class="btn btn-primary" id="absentConfirm">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit class popover -->
+<div class="popover-overlay" id="editClassOverlay">
+  <div class="popover">
+    <div class="popover-title">编辑班级信息</div>
+    <div class="popover-field"><label>班序号</label><input id="editClassNo" placeholder="如：6"></div>
+    <div class="popover-field"><label>班主任</label><input id="editTeacher" placeholder="班主任姓名"></div>
+    <div class="popover-field"><label>备注</label><input id="editNote" placeholder="备注说明"></div>
+    <div class="popover-actions">
+      <button class="btn btn-cancel" id="editClassCancel">取消</button>
+      <button class="btn btn-primary" id="editClassConfirm">保存</button>
+    </div>
+  </div>
+</div>
+
+<main class="main">
+  <div class="page active" id="page-week">
+    <div class="week-bar">
+      <div class="week-selector">
+        <button class="btn-week" id="btnPrevWeek">←</button>
+        <div class="week-label" id="weekLabel"></div>
+        <button class="btn-week" id="btnNextWeek">→</button>
+      </div>
+      <button class="btn-today" id="btnTodayWeek">本周</button>
+    </div>
+    <div class="stats-row" id="weekStats"></div>
+    <div class="charts-row" id="chartsRow"></div>
+    <div class="ranking-bar" id="rankingBar"></div>
+    <div class="class-cards" id="classCards"></div>
+  </div>
+
+  <div class="page" id="page-history">
+    <div class="week-bar">
+      <div class="week-selector">
+        <button class="btn-month" id="btnPrevMonthH">←</button>
+        <div class="week-label" id="monthLabelH" style="font-size:1.2rem;"></div>
+        <button class="btn-month" id="btnNextMonthH">→</button>
+      </div>
+    </div>
+    <div id="historyContent"></div>
+  </div>
+
+  <div class="page" id="page-manage">
+    <div class="manage-card">
+      <div class="manage-title">添加班级</div>
+      <div class="form-row">
+        <div class="form-field"><label>班级名称</label><input id="addClassName" placeholder="如：八1班" maxlength="10"></div>
+        <div class="form-field"><label>班序号</label><input id="addClassNo" placeholder="如：1" maxlength="5"></div>
+        <div class="form-field"><label>班主任</label><input id="addTeacher" placeholder="班主任姓名" maxlength="10"></div>
+        <div class="form-field"><label>应到人数</label><input id="addCount" type="number" min="1" max="99" value="45"></div>
+        <button class="btn-sm primary" id="btnAddClass" style="align-self:flex-end;">添加班级</button>
+      </div>
+    </div>
+    <div class="manage-card">
+      <div class="manage-title">现有班级</div>
+      <div id="classList"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+/* ================================================================
+   签到登记 — 多班级并列版
+   ================================================================ */
+const STORAGE_KEY = 'attendance_v2';
+const SUPABASE_URL = 'https://zhfgvjfuvewbirbvwtrm.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpoZmd2amZ1dmV3YmlyYnZ3dHJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxMzMzNTQsImV4cCI6MjA5NzcwOTM1NH0.ToHYyCmTYXKEAxL1URq69EuIVJD-VBna-EHBqthgTSM';
+const TABLE = 'attendance_state';
+let isCloud = false, cloudMtime = 0, rankChart = null;
+let state = null, currentWeek = '', historyMonth = '';
+let absentTarget = null, editClassTarget = null;
+
+function getDefaultData() {
+  const classes = {};
+  for (let i = 1; i <= 17; i++) {
+    classes[`八${i}班`] = { no: `${i}`, teacher: '', note: '', count: 45 };
+  }
+  return { _version: 3, classes, records: {} };
+}
+
+const DAY_NAMES = ['周日','周一','周二','周三','周四','周五','周六'];
+
+function getWeekKey(d) {
+  d = new Date(d);
+  const jan1 = new Date(d.getFullYear(),0,1);
+  const w = Math.ceil(((d-jan1)/86400000+jan1.getDay()+1)/7);
+  return `${d.getFullYear()}-${String(w).padStart(2,'0')}`;
+}
+function getThisWeek() { return getWeekKey(new Date()); }
+function getWeekDates(wk) {
+  const [y,w] = wk.split('-').map(Number);
+  const jan1 = new Date(y,0,1);
+  const days = (w-1)*7 - jan1.getDay() + 1;
+  const mon = new Date(y,0,1+days);
+  return [0,1,2,3,4,5,6].map(i => { const d=new Date(mon);d.setDate(mon.getDate()+i);return d; });
+}
+function getMonthKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+
+function classWeekRate(className, wk) {
+  const recs = (state.records[className]||{})[wk]||{};
+  const cls = state.classes[className];
+  let exp=0, act=0;
+  for (let i=1;i<=7;i++) {
+    const dr = recs[DAY_NAMES[i]];
+    exp += dr ? dr.expected : cls.count;
+    act += dr ? dr.actual : cls.count;
+  }
+  return exp>0 ? Math.round(act/exp*100) : 100;
+}
+
+// ── Cloud ──
+async function loadCloud() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.1&select=payload,updated_at`,{
+      headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`}
+    });
+    if(!res.ok)return null;
+    const rows=await res.json();
+    if(rows&&rows.length>0&&rows[0].payload){cloudMtime=Date.now();return rows[0].payload;}
+  }catch(e){}
+  return null;
+}
+async function saveCloud(data) {
+  try{
+    let res=await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.1`,{
+      method:'PATCH',headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json'},
+      body:JSON.stringify({payload:data,updated_at:new Date().toISOString()})
+    });
+    if(!res.ok){
+      res=await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`,{
+        method:'POST',headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`,'Content-Type':'application/json'},
+        body:JSON.stringify({id:1,payload:data,updated_at:new Date().toISOString()})
+      });
+    }
+    if(res.ok){cloudMtime=Date.now();isCloud=true;}
+  }catch(e){console.warn('Cloud save:',e)}
+}
+function saveState() {
+  if(isCloud) saveCloud(state);
+  else localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+}
+
+// Ensure all 17 classes exist
+function ensureAllClasses() {
+  for (let i = 1; i <= 17; i++) {
+    const cn = `八${i}班`;
+    if (!state.classes[cn]) {
+      state.classes[cn] = { no: `${i}`, teacher: '', note: '', count: 45 };
+    }
+  }
+}
+
+// ── Init ──
+async function initApp() {
+  const cd = await loadCloud();
+  if(cd && cd.classes){ state=cd; isCloud=true; ensureAllClasses(); console.log('☁ 云端加载'); }
+  else {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){ try{state=JSON.parse(raw);ensureAllClasses();}catch(e){} }
+    if(!state || Object.keys(state.classes||{}).length===0) state=getDefaultData();
+    saveCloud(state);
+  }
+  currentWeek = getThisWeek();
+  historyMonth = getMonthKey(new Date());
+  renderWeekPage();
+}
+function showToast(m) {
+  const el=document.createElement('div');el.className='toast';el.textContent=m;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(()=>el.remove(),2500);
+}
+
+/* ================================================================
+   WEEK PAGE
+   ================================================================ */
+function renderWeekPage() {
+  const dates = getWeekDates(currentWeek);
+  const mon=dates[1], fri=dates[5];
+  document.getElementById('weekLabel').textContent = `第${currentWeek.split('-')[1]}周 · ${mon.getMonth()+1}/${mon.getDate()}−${fri.getMonth()+1}/${fri.getDate()}`;
+
+  // Overall stats (grade director perspective)
+  let totalAbs=0;
+  const classRates = [];
+  let fullClasses = 0;
+  Object.keys(state.classes).forEach(cn => {
+    const recs = (state.records[cn]||{})[currentWeek]||{};
+    const cls = state.classes[cn];
+    let e=0, a=0;
+    for(let i=1;i<=7;i++){
+      const dr = recs[DAY_NAMES[i]];
+      e += dr ? dr.expected : cls.count;
+      a += dr ? dr.actual : cls.count;
+      totalAbs += dr && dr.absent ? dr.absent.length : 0;
+    }
+    const rate = e>0 ? Math.round(a/e*100) : 100;
+    classRates.push({name:cn, no:cls.no||'', rate, exp:e, act:a, absent:totalAbs});
+    if(rate >= 100) fullClasses++;
+  });
+  classRates.sort((a,b)=>b.rate-a.rate);
+  const allRate = classRates.length>0 ? Math.round(classRates.reduce((s,c)=>s+c.rate,0)/classRates.length) : 100;
+  const worst = classRates[classRates.length-1] || {name:'-',rate:100};
+
+  document.getElementById('weekStats').innerHTML = `
+    <div class="stat-card"><div class="stat-icon" style="background:#f0ebe0">📊</div><div><div class="stat-label">年级平均出勤率</div><div class="stat-value">${allRate}%</div></div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:var(--success-bg)">🏅</div><div><div class="stat-label">全勤班级数</div><div class="stat-value">${fullClasses}<span style="font-size:0.9rem;font-weight:400;color:var(--text-light);">/${classRates.length}班</span></div></div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:var(--danger-bg)">⚠️</div><div><div class="stat-label">未到总人次</div><div class="stat-value">${totalAbs}</div></div></div>
+    <div class="stat-card"><div class="stat-icon" style="background:#f0edf4">🔍</div><div><div class="stat-label">需关注班级</div><div class="stat-value" style="font-size:1.1rem;">${worst.name}<span style="font-size:0.85rem;font-weight:400;color:var(--text-light);"> ${worst.rate}%</span></div></div></div>
+  `;
+
+  // Ranking bar
+  document.getElementById('rankingBar').innerHTML = `
+    <span style="font-family:var(--font-serif);font-weight:600;margin-right:0.5rem;">🏆 出勤排名</span>
+    ${classRates.map((c,i) => {
+      const rateCls = c.rate>=100?'good':c.rate>=90?'warn':'bad';
+      return `<div class="ranking-item"><span style="font-weight:700;min-width:1.2rem;">${i+1}</span><span class="ranking-name">${c.name}</span><span class="ranking-rate ${rateCls}">${c.rate}%</span></div>`;
+    }).join('')}
+  `;
+
+  // Charts
+  renderCharts(classRates);
+
+  // Class cards
+  document.getElementById('classCards').innerHTML = Object.keys(state.classes).map(cn => {
+    const cls = state.classes[cn];
+    const recs = (state.records[cn]||{})[currentWeek]||{};
+    const today = new Date().toISOString().slice(0,10);
+    let e=0, a=0;
+    const dayRows = [1,2,3,4,5,6,0].map(i => { // Mon-Sun
+      const dk = DAY_NAMES[i];
+      const dateStr = dates[i].toISOString().slice(0,10);
+      const isToday = dateStr === today;
+      const isWeekend = i===6||i===0;
+      const dr = recs[dk] || { expected: cls.count, actual: cls.count, absent: [] };
+      e += dr.expected; a += dr.actual;
+      const rate = dr.expected>0 ? Math.round(dr.actual/dr.expected*100) : 100;
+      const rc = rate>=100?'good':rate>=90?'warn':'bad';
+      return {i, dk, dateStr, isToday, isWeekend, dr, rate, rc};
+    });
+    const wkRate = e>0 ? Math.round(a/e*100):100;
+    const rCls = wkRate>=100?'good':wkRate>=90?'warn':'bad';
+    return `
+      <div class="class-card">
+        <div class="class-header">
+          <div class="class-info">
+            <div class="class-no">${cls.no?'班序 '+cls.no:''}</div>
+            <div class="class-name">${cn}</div>
+            <div class="class-teacher">${cls.teacher||'班主任未填写'}</div>
+          </div>
+          <div class="class-rate-badge ${rCls}">${wkRate}%<small>本周出勤率</small></div>
+          <button class="btn-sm" onclick="openEditClass('${cn}')" style="margin-left:0.5rem;" title="编辑班级信息">✎</button>
+        </div>
+        <div class="day-rows">
+          ${dayRows.map(dr => `
+            <div class="day-row" style="${dr.isWeekend?'opacity:0.6;background:rgba(0,0,0,0.02);':''}">
+              <div class="day-tag ${dr.isToday?'today':''}" style="${dr.isWeekend?'color:var(--text-lighter);':''}">${dr.dk}${dr.isWeekend?' ⛱':''}</div>
+              <div class="day-fields">
+                <span class="field-label">应到</span>
+                <input class="field-input" id="exp_${cn}_${dr.i}" type="number" min="0" max="99" value="${dr.dr.expected}" onchange="autoSaveDay('${cn}',${dr.i})">
+                <span class="field-label">实到</span>
+                <input class="field-input" id="act_${cn}_${dr.i}" type="number" min="0" max="99" value="${dr.dr.actual}" onchange="autoSaveDay('${cn}',${dr.i})">
+                <span class="day-rate-mini ${dr.rc}">${dr.rate}%</span>
+                <span class="absent-mini">未到<span>${dr.dr.absent?dr.dr.absent.length:0}</span>人</span>
+                <button class="btn-add-absent" onclick="openAbsent('${cn}',${dr.i})">+</button>
+              </div>
+            </div>
+            ${(dr.dr.absent||[]).length>0 ? `
+            <div style="padding-left:3rem;padding-bottom:0.3rem;">
+              <div class="absent-tags">
+                ${dr.dr.absent.map((ab,ai)=>`
+                  <span class="absent-tag">${ab.name}·${ab.reason}<span class="del" onclick="removeAbsent('${cn}',${dr.i},${ai})">×</span></span>
+                `).join('')}
+              </div>
+            </div>`:''}
+          `).join('')}
+        </div>
+        <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--border-light);font-size:0.82rem;color:var(--text-light);">
+          📝 ${cls.note || '暂无备注（点击 ✎ 编辑班级信息添加请假说明）'}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function autoSaveDay(cn, dayIdx) {
+  const expEl = document.getElementById(`exp_${cn}_${dayIdx}`);
+  const actEl = document.getElementById(`act_${cn}_${dayIdx}`);
+  if(!expEl||!actEl) return;
+  let exp=parseInt(expEl.value)||0, act=parseInt(actEl.value)||0;
+  if(act>exp){actEl.value=exp;act=exp;}
+  if(!state.records[cn]) state.records[cn]={};
+  if(!state.records[cn][currentWeek]) state.records[cn][currentWeek]={};
+  const dk = DAY_NAMES[dayIdx];
+  const dates = getWeekDates(currentWeek);
+  if(!state.records[cn][currentWeek][dk]) {
+    state.records[cn][currentWeek][dk] = {date:dates[dayIdx].toISOString().slice(0,10),expected:exp,actual:act,absent:[]};
+  } else {
+    state.records[cn][currentWeek][dk].expected=exp;
+    state.records[cn][currentWeek][dk].actual=act;
+  }
+  saveState();
+  renderWeekPage();
+}
+
+// ── Absent ──
+function openAbsent(cn, dayIdx) {
+  absentTarget = {cn, dayIdx};
+  document.getElementById('absentStudent').value='';
+  document.getElementById('absentReason').value='';
+  document.getElementById('absentOverlay').classList.add('show');
+}
+document.getElementById('absentCancel').addEventListener('click',()=>{document.getElementById('absentOverlay').classList.remove('show');absentTarget=null;});
+document.getElementById('absentConfirm').addEventListener('click',()=>{
+  if(!absentTarget)return;
+  const name=document.getElementById('absentStudent').value.trim();
+  const reason=document.getElementById('absentReason').value.trim();
+  if(!name){showToast('请输入学生姓名');return;}
+  if(!reason){showToast('请填写原因');return;}
+  const {cn,dayIdx}=absentTarget;
+  const dk=DAY_NAMES[dayIdx];
+  if(!state.records[cn])state.records[cn]={};
+  if(!state.records[cn][currentWeek])state.records[cn][currentWeek]={};
+  if(!state.records[cn][currentWeek][dk]){
+    const dates=getWeekDates(currentWeek);
+    const cls=state.classes[cn];
+    state.records[cn][currentWeek][dk]={date:dates[dayIdx].toISOString().slice(0,10),expected:cls.count,actual:cls.count,absent:[]};
+  }
+  const dr=state.records[cn][currentWeek][dk];
+  if(dr.absent.some(a=>a.name===name)){showToast('已登记');return;}
+  dr.absent.push({name,reason});
+  dr.actual=Math.max(0,dr.expected-dr.absent.length);
+  saveState();
+  document.getElementById('absentOverlay').classList.remove('show');
+  absentTarget=null;
+  renderWeekPage();
+  showToast(`${name} · ${reason}`);
+});
+function removeAbsent(cn,dayIdx,ai){
+  const dk=DAY_NAMES[dayIdx];
+  const dr=((state.records[cn]||{})[currentWeek]||{})[dk];
+  if(dr){dr.absent.splice(ai,1);dr.actual=Math.min(dr.expected,dr.expected-dr.absent.length);saveState();renderWeekPage();}
+}
+
+// ── Edit class ──
+function openEditClass(cn){
+  editClassTarget=cn;
+  const cls=state.classes[cn];
+  document.getElementById('editClassNo').value=cls.no||'';
+  document.getElementById('editTeacher').value=cls.teacher||'';
+  document.getElementById('editNote').value=cls.note||'';
+  document.getElementById('editClassOverlay').classList.add('show');
+}
+document.getElementById('editClassCancel').addEventListener('click',()=>{document.getElementById('editClassOverlay').classList.remove('show');editClassTarget=null;});
+document.getElementById('editClassConfirm').addEventListener('click',()=>{
+  if(!editClassTarget)return;
+  const cls=state.classes[editClassTarget];
+  cls.no=document.getElementById('editClassNo').value.trim();
+  cls.teacher=document.getElementById('editTeacher').value.trim();
+  cls.note=document.getElementById('editNote').value.trim();
+  saveState();
+  document.getElementById('editClassOverlay').classList.remove('show');
+  editClassTarget=null;
+  renderWeekPage();
+  showToast(`${editClassTarget} 信息已更新`);
+});
+
+// ── Charts ──
+function renderCharts(classRates) {
+  document.getElementById('chartsRow').innerHTML=`
+    <div class="chart-card"><div class="chart-title">各班出勤率排名</div><div class="chart-wrap"><canvas id="rankCanvas"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">本周每日年级出勤趋势</div><div class="chart-wrap"><canvas id="trendCanvas"></canvas></div></div>
+  `;
+  setTimeout(()=>{
+    // Rank chart
+    const rc=document.getElementById('rankCanvas');if(!rc)return;
+    if(rankChart)rankChart.destroy();
+    rankChart=new Chart(rc.getContext('2d'),{
+      type:'bar',data:{labels:classRates.map(c=>c.name),datasets:[{label:'出勤率 %',data:classRates.map(c=>c.rate),
+        backgroundColor:classRates.map((_,i)=>['rgba(66,102,131,0.75)','rgba(134,149,84,0.75)','rgba(155,62,70,0.65)','rgba(199,130,58,0.75)'][i%4]),
+        borderRadius:6}]},
+      options:{responsive:true,indexAxis:'y',plugins:{legend:{display:false}},
+        scales:{x:{min:80,max:100,grid:{color:'#f0ebe2'},ticks:{callback:v=>v+'%',font:{size:10},color:'#8c8880'}},y:{grid:{display:false},ticks:{font:{family:"'Noto Sans SC',sans-serif",size:11},color:'#3d3d3d'}}}}
+    });
+    // Daily grade trend chart
+    const dailyRates = [];
+    for(let i=1;i<=7;i++){
+      let e=0,a=0;
+      Object.keys(state.classes).forEach(cn=>{
+        const cls=state.classes[cn];
+        const dr=((state.records[cn]||{})[currentWeek]||{})[DAY_NAMES[i]];
+        e+= dr ? dr.expected : cls.count;
+        a+= dr ? dr.actual : cls.count;
+      });
+      dailyRates.push({label:DAY_NAMES[i], rate:e>0?Math.round(a/e*100):100});
+    }
+    new Chart(document.getElementById('trendCanvas').getContext('2d'),{
+      type:'line',data:{labels:dailyRates.map(d=>d.label),datasets:[{label:'年级出勤率 %',data:dailyRates.map(d=>d.rate),
+        borderColor:'#426683',backgroundColor:'rgba(66,102,131,0.08)',borderWidth:2.5,fill:true,pointRadius:5,pointBackgroundColor:'#426683',tension:0.35}]},
+      options:{responsive:true,plugins:{legend:{display:false}},
+        scales:{y:{min:Math.max(60,Math.min(...dailyRates.map(d=>d.rate))-10),max:100,grid:{color:'#f0ebe2'},ticks:{callback:v=>v+'%',font:{size:10},color:'#8c8880'}},x:{grid:{display:false},ticks:{font:{family:"'Noto Sans SC',sans-serif",size:11},color:'#3d3d3d'}}}}
+    });
+  },100);
+}
+
+// ── Navigation ──
+document.getElementById('btnPrevWeek').addEventListener('click',()=>{const d=getWeekDates(currentWeek)[1];d.setDate(d.getDate()-7);currentWeek=getWeekKey(d);renderWeekPage();});
+document.getElementById('btnNextWeek').addEventListener('click',()=>{const d=getWeekDates(currentWeek)[1];d.setDate(d.getDate()+7);currentWeek=getWeekKey(d);renderWeekPage();});
+document.getElementById('btnTodayWeek').addEventListener('click',()=>{currentWeek=getThisWeek();renderWeekPage();});
+document.querySelectorAll('.nav-tab').forEach(t=>{t.addEventListener('click',()=>{
+  document.querySelectorAll('.nav-tab').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+t.dataset.page).classList.add('active');
+  if(t.dataset.page==='week')renderWeekPage();
+  if(t.dataset.page==='history')renderHistoryPage();
+  if(t.dataset.page==='manage')renderManagePage();
+});});
+
+/* ================================================================
+   HISTORY — Calendar view with holidays
+   ================================================================ */
+const HOLIDAYS_2026 = {
+  '01-01':'元旦','01-02':'元旦假','01-03':'元旦假',
+  '02-15':'除夕','02-16':'春节','02-17':'春节','02-18':'春节','02-19':'春节','02-20':'春节','02-21':'春节','02-22':'春节假',
+  '04-05':'清明','04-06':'清明假',
+  '05-01':'劳动节','05-02':'劳动节','05-03':'劳动节','05-04':'劳动节','05-05':'劳动节',
+  '06-19':'端午','06-20':'端午假','06-21':'端午假',
+  '09-25':'中秋','09-26':'中秋假','09-27':'中秋假',
+  '10-01':'国庆节','10-02':'国庆节','10-03':'国庆节','10-04':'国庆节','10-05':'国庆节','10-06':'国庆节','10-07':'国庆节',
+};
+function getHoliday(dateStr) { const mmdd = dateStr.slice(5); return HOLIDAYS_2026[mmdd] || null; }
+
+function renderHistoryPage() {
+  const [y,m] = historyMonth.split('-').map(Number);
+  document.getElementById('monthLabelH').textContent = `${y}年${m}月`;
+
+  const firstDay = new Date(y, m-1, 1);
+  const lastDay = new Date(y, m, 0);
+  const daysInMonth = lastDay.getDate();
+  const startDow = firstDay.getDay(); // 0=Sun
+  const today = new Date().toISOString().slice(0,10);
+
+  // Calculate daily attendance rates for this month
+  const dayStats = {};
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    let totalExp = 0, totalAct = 0, classCount = 0;
+    Object.keys(state.classes).forEach(cn => {
+      const cls = state.classes[cn];
+      Object.values(state.records[cn] || {}).forEach(wr => {
+        Object.entries(wr).forEach(([dk, dr]) => {
+          if (dr.date === ds) { totalExp += dr.expected; totalAct += dr.actual; classCount++; }
+        });
+      });
+    });
+    dayStats[ds] = { exp: totalExp, act: totalAct, classes: classCount, rate: totalExp>0 ? Math.round(totalAct/totalExp*100) : -1 };
+  }
+
+  // Build calendar HTML
+  let calHTML = '<div class="calendar-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:1rem;">';
+  calHTML += ['日','一','二','三','四','五','六'].map(h => `<div style="text-align:center;font-size:0.8rem;color:var(--text-lighter);padding:0.5rem 0;font-weight:500;">${h}</div>`).join('');
+
+  for (let i = 0; i < startDow; i++) calHTML += '<div></div>';
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const st = dayStats[ds];
+    const isToday = ds === today;
+    const holiday = getHoliday(ds);
+    let bg = '', content = '';
+
+    if (holiday) {
+      bg = 'background:#fef3e8;';
+      content = `<div style="font-size:0.65rem;color:var(--accent3);margin-top:1px;">${holiday}</div>`;
+    }
+    if (st && st.rate >= 0) {
+      const alpha = st.rate >= 100 ? 0.3 : st.rate >= 90 ? 0.15 : 0.08;
+      const color = st.rate >= 100 ? 'rgba(91,140,90,' : st.rate >= 90 ? 'rgba(199,130,58,' : 'rgba(192,80,77,';
+      if (!holiday) bg = `background:${color}${alpha});`;
+    }
+
+    calHTML += `<div onclick="onCalendarDayClick('${ds}')" style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:var(--radius-sm);cursor:pointer;font-size:0.85rem;${bg}${isToday?'border:2px solid var(--primary);font-weight:700;':''}">
+      <span>${d}</span>${content}
+      ${st && st.rate >= 0 ? `<div style="font-size:0.6rem;color:var(--text-light);">${st.classes}班·${st.rate}%</div>` : ''}
+    </div>`;
+  }
+  calHTML += '</div>';
+
+  document.getElementById('historyContent').innerHTML = calHTML + '<div id="calendarDayDetail"></div>';
+}
+
+function onCalendarDayClick(ds) {
+  const detail = {};
+  Object.keys(state.classes).forEach(cn => {
+    const cls = state.classes[cn];
+    Object.values(state.records[cn] || {}).forEach(wr => {
+      Object.entries(wr).forEach(([dk, dr]) => {
+        if (dr.date === ds) {
+          if (!detail[cn]) detail[cn] = { expected: 0, actual: 0, absent: [] };
+          detail[cn].expected += dr.expected;
+          detail[cn].actual += dr.actual;
+          detail[cn].absent.push(...(dr.absent || []));
+        }
+      });
+    });
+  });
+
+  const names = Object.keys(detail);
+  let html = `<div style="background:var(--card-bg);border-radius:var(--radius-lg);padding:1.5rem;box-shadow:var(--shadow);margin-top:1rem;">
+    <div style="font-family:var(--font-serif);font-weight:600;margin-bottom:1rem;">📅 ${ds} 签到详情</div>`;
+  if (names.length === 0) {
+    html += '<div class="no-data">当日无签到记录</div>';
+  } else {
+    html += '<table style="width:100%;border-collapse:collapse;"><thead><tr><th style="text-align:left;padding:0.5rem;border-bottom:1px solid var(--border);font-size:0.8rem;color:var(--text-light);">班级</th><th style="text-align:center;padding:0.5rem;border-bottom:1px solid var(--border);font-size:0.8rem;color:var(--text-light);">应到/实到</th><th style="text-align:center;padding:0.5rem;border-bottom:1px solid var(--border);font-size:0.8rem;color:var(--text-light);">出勤率</th><th style="text-align:left;padding:0.5rem;border-bottom:1px solid var(--border);font-size:0.8rem;color:var(--text-light);">未到</th></tr></thead><tbody>';
+    names.forEach(cn => {
+      const d = detail[cn];
+      const rate = d.expected>0 ? Math.round(d.actual/d.expected*100) : 100;
+      const rc = rate>=100?'good':rate>=90?'warn':'bad';
+      html += `<tr><td style="padding:0.5rem;border-bottom:1px solid var(--border-light);font-weight:500;">${cn}</td><td style="text-align:center;padding:0.5rem;border-bottom:1px solid var(--border-light);">${d.actual}/${d.expected}</td><td style="text-align:center;padding:0.5rem;border-bottom:1px solid var(--border-light);"><span class="day-rate-mini ${rc}">${rate}%</span></td><td style="padding:0.5rem;border-bottom:1px solid var(--border-light);font-size:0.82rem;">${d.absent.map(a=>`${a.name}·${a.reason}`).join('，')||'-'}</td></tr>`;
+    });
+    html += '</tbody></table>';
+  }
+  html += '</div>';
+  document.getElementById('calendarDayDetail').innerHTML = html;
+}
+
+document.getElementById('btnPrevMonthH').addEventListener('click',()=>{const[y,m]=historyMonth.split('-').map(Number);historyMonth=getMonthKey(new Date(y,m-2,1));renderHistoryPage();});
+document.getElementById('btnNextMonthH').addEventListener('click',()=>{const[y,m]=historyMonth.split('-').map(Number);historyMonth=getMonthKey(new Date(y,m,1));renderHistoryPage();});
+
+/* ================================================================
+   MANAGE
+   ================================================================ */
+function renderManagePage(){
+  document.getElementById('classList').innerHTML=Object.entries(state.classes).map(([cn,cls])=>`
+    <div class="class-list-item">
+      <span style="color:var(--text-lighter);font-size:0.8rem;">#${cls.no||'-'}</span>
+      <span class="name">${cn}</span>
+      <span style="font-size:0.8rem;color:var(--text-light);">${cls.teacher||'未填班主任'} · 应到${cls.count}人</span>
+      <button class="btn-sm" onclick="openEditClass('${cn}')">✎</button>
+      <button class="btn-sm danger" onclick="deleteClass('${cn}')">删除</button>
+    </div>
+  `).join('');
+}
+function deleteClass(cn){
+  if(!confirm(`确定删除 ${cn} 及其所有签到记录吗？`))return;
+  delete state.classes[cn];
+  delete state.records[cn];
+  saveState();
+  renderManagePage();
+  showToast(`已删除 ${cn}`);
+}
+document.getElementById('btnAddClass').addEventListener('click',()=>{
+  const cn=document.getElementById('addClassName').value.trim();
+  const no=document.getElementById('addClassNo').value.trim();
+  const teacher=document.getElementById('addTeacher').value.trim();
+  const count=parseInt(document.getElementById('addCount').value)||45;
+  if(!cn){showToast('请输入班级名称');return;}
+  if(state.classes[cn]){showToast('该班级已存在');return;}
+  state.classes[cn]={no,teacher,note:'',count,students:[]};
+  saveState();
+  document.getElementById('addClassName').value='';
+  document.getElementById('addTeacher').value='';
+  renderManagePage();
+  showToast(`已添加 ${cn}`);
+});
+
+// ── Poll ──
+setInterval(async()=>{
+  if(!isCloud)return;
+  try{
+    const res=await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?id=eq.1&select=updated_at`,{headers:{'apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`}});
+    if(!res.ok)return;
+    const rows=await res.json();
+    if(rows&&rows.length>0){const ts=new Date(rows[0].updated_at).getTime();if(ts>cloudMtime+1000){const data=await loadCloud();if(data){state=data;ensureAllClasses();cloudMtime=ts;const ap=document.querySelector('.page.active');if(ap.id==='page-week')renderWeekPage();if(ap.id==='page-history')renderHistoryPage();}}}
+  }catch(e){}
+},5000);
+
+// Start
+initApp();
+</script>
+</body>
+</html>
