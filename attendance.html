@@ -509,10 +509,10 @@ function renderWeekPage() {
     const recs = (state.records[cn]||{})[currentWeek]||{};
     const cls = state.classes[cn];
     let e=0, a=0, clsAbs=0, clsTracked=0;
-    for(let i=1;i<=7;i++){
+    [1,2,3,4,5,6,0].forEach(i => { // Mon-Sun
       const dr = recs[DAY_NAMES[i]];
       if(dr){ e += dr.expected; a += dr.actual; clsTracked++; clsAbs += dr.absent ? dr.absent.length : 0; }
-    }
+    });
     totalAbs += clsAbs; totalTracked += clsTracked;
     const rate = e>0 ? Math.round(a/e*100) : (clsTracked>0 ? 0 : 100);
     classRates.push({name:cn, no:cls.no||'', rate, exp:e, act:a, absent:clsAbs, tracked:clsTracked});
@@ -702,7 +702,7 @@ document.getElementById('editClassConfirm').addEventListener('click',()=>{
 function renderCharts(classRates) {
   document.getElementById('chartsRow').innerHTML=`
     <div class="chart-card"><div class="chart-title">各班出勤率排名</div><div class="chart-wrap"><canvas id="rankCanvas"></canvas></div></div>
-    <div class="chart-card"><div class="chart-title">本周每日年级出勤趋势</div><div class="chart-wrap"><canvas id="trendCanvas"></canvas></div></div>
+    <div class="chart-card"><div class="chart-title">本日各班出勤率（${DAY_NAMES[new Date().getDay()]}）</div><div class="chart-wrap"><canvas id="trendCanvas"></canvas></div></div>
   `;
   setTimeout(()=>{
     // Rank chart
@@ -715,23 +715,20 @@ function renderCharts(classRates) {
       options:{responsive:true,indexAxis:'y',plugins:{legend:{display:false}},
         scales:{x:{min:80,max:100,grid:{color:'#f0ebe2'},ticks:{callback:v=>v+'%',font:{size:10},color:'#8c8880'}},y:{grid:{display:false},ticks:{font:{family:"'Noto Sans SC',sans-serif",size:11},color:'#3d3d3d'}}}}
     });
-    // Daily grade trend chart
-    const dailyRates = [];
-    for(let i=1;i<=7;i++){
-      let e=0,a=0,has=0;
-      Object.keys(state.classes).forEach(cn=>{
-        const cls=state.classes[cn];
-        const dr=((state.records[cn]||{})[currentWeek]||{})[DAY_NAMES[i]];
-        if(dr){ e+=dr.expected; a+=dr.actual; has++; }
-      });
-      dailyRates.push({label:DAY_NAMES[i], rate:has>0?(e>0?Math.round(a/e*100):0):null});
-    }
-    const validRates=dailyRates.filter(d=>d.rate!==null).map(d=>d.rate);
+    // Today's per-class attendance rate chart
+    const todayDayName = DAY_NAMES[new Date().getDay()];
+    const todayRates = Object.keys(state.classes).map(cn => {
+      const cls = state.classes[cn];
+      const dr = ((state.records[cn]||{})[currentWeek]||{})[todayDayName];
+      const rate = dr ? (dr.expected>0 ? Math.round(dr.actual/dr.expected*100) : 100) : null;
+      return {name:cn, rate:rate};
+    }).filter(c => c.rate !== null).sort((a,b) => b.rate - a.rate);
     new Chart(document.getElementById('trendCanvas').getContext('2d'),{
-      type:'line',data:{labels:dailyRates.map(d=>d.label),datasets:[{label:'年级出勤率 %',data:dailyRates.map(d=>d.rate),
-        borderColor:'#426683',backgroundColor:'rgba(66,102,131,0.08)',borderWidth:2.5,fill:true,pointRadius:5,pointBackgroundColor:'#426683',tension:0.35,spanGaps:false}]},
-      options:{responsive:true,plugins:{legend:{display:false}},
-        scales:{y:{min:validRates.length>0?Math.max(60,Math.min(...validRates)-10):80,max:100,grid:{color:'#f0ebe2'},ticks:{callback:v=>v+'%',font:{size:10},color:'#8c8880'}},x:{grid:{display:false},ticks:{font:{family:"'Noto Sans SC',sans-serif",size:11},color:'#3d3d3d'}}}}
+      type:'bar',data:{labels:todayRates.map(c=>c.name),datasets:[{label:'今日出勤率 %',data:todayRates.map(c=>c.rate),
+        backgroundColor:todayRates.map(c=>c.rate>=100?'rgba(91,140,90,0.7)':c.rate>=90?'rgba(199,130,58,0.7)':'rgba(192,80,77,0.7)'),
+        borderRadius:4}]},
+      options:{responsive:true,indexAxis:'y',plugins:{legend:{display:false}},
+        scales:{x:{min:0,max:100,grid:{color:'#f0ebe2'},ticks:{callback:v=>v+'%',font:{size:10},color:'#8c8880'}},y:{grid:{display:false},ticks:{font:{family:"'Noto Sans SC',sans-serif",size:11},color:'#3d3d3d'}}}}
     });
   },100);
 }
@@ -742,6 +739,8 @@ document.getElementById('btnNextWeek').addEventListener('click',()=>{const d=get
 document.getElementById('btnTodayWeek').addEventListener('click',()=>{currentWeek=getThisWeek();renderWeekPage();});
 document.getElementById('btnResetWeek').addEventListener('click',()=>{
   const wkNum = currentWeek.split('-')[1];
+  const pwd = prompt('请输入重置密码：');
+  if(pwd !== '888666'){ showToast('❌ 密码错误，操作已取消'); return; }
   if(!confirm(`确定要将第${wkNum}周每天实到人数全部重置为0吗？\n应到人数保留，未到名单清空。`))return;
   const dates = getWeekDates(currentWeek);
   Object.keys(state.classes).forEach(cn => {
