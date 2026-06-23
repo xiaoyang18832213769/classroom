@@ -472,16 +472,24 @@ function renderCheckinAlert() {
     }
   });
 
+  let html = '';
   if (unchecked.length === 0) {
     alert.className = 'checkin-alert ok';
-    alert.innerHTML = `<span class="alert-icon">✅</span><span class="alert-text">今日所有班级均已签到（${todayDayName}）</span>`;
+    html = `<span class="alert-icon">✅</span><span class="alert-text">今日所有班级均已签到（${todayDayName}）</span>`;
   } else {
     alert.className = 'checkin-alert warn';
-    alert.innerHTML = `<span class="alert-icon">⚠️</span><span class="alert-text">
+    html = `<span class="alert-icon">⚠️</span><span class="alert-text">
       今日（${todayDayName}）<b>${unchecked.length}</b> 个班未签到：
       ${unchecked.map(cn => `<span class="cls-tag">${cn}</span>`).join('')}
     </span>`;
   }
+
+  // 周日提醒：本周即将结束
+  if(today.getDay()===0){
+    html += `<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-light);border-top:1px dashed var(--border);padding-top:0.5rem;">📌 今日周日，本周数据即将归档。下周一开始新一周，数据自动清零。</div>`;
+  }
+
+  alert.innerHTML = html;
 }
 
 function renderWeekPage() {
@@ -733,13 +741,24 @@ document.getElementById('btnPrevWeek').addEventListener('click',()=>{const d=get
 document.getElementById('btnNextWeek').addEventListener('click',()=>{const d=getWeekDates(currentWeek)[1];d.setDate(d.getDate()+7);currentWeek=getWeekKey(d);renderWeekPage();});
 document.getElementById('btnTodayWeek').addEventListener('click',()=>{currentWeek=getThisWeek();renderWeekPage();});
 document.getElementById('btnResetWeek').addEventListener('click',()=>{
-  if(!confirm(`确定要清除第${currentWeek.split('-')[1]}周所有班级的签到数据吗？\n此操作不可恢复，建议先确认数据已备份。`))return;
-  Object.keys(state.records).forEach(cn => {
-    if(state.records[cn][currentWeek]) delete state.records[cn][currentWeek];
+  const wkNum = currentWeek.split('-')[1];
+  if(!confirm(`确定要将第${wkNum}周每天实到人数全部重置为0吗？\n应到人数保留，未到名单清空。`))return;
+  const dates = getWeekDates(currentWeek);
+  Object.keys(state.classes).forEach(cn => {
+    if(!state.records[cn]) state.records[cn] = {};
+    if(!state.records[cn][currentWeek]) state.records[cn][currentWeek] = {};
+    [1,2,3,4,5,6,0].forEach(i => {
+      state.records[cn][currentWeek][DAY_NAMES[i]] = {
+        date: dates[i].toISOString().slice(0,10),
+        expected: state.classes[cn].count,
+        actual: 0,
+        absent: []
+      };
+    });
   });
   saveState();
   renderWeekPage();
-  showToast('🔄 本周签到数据已重置');
+  showToast('🔄 本周实到人数已全部重置为0');
 });
 document.querySelectorAll('.nav-tab').forEach(t=>{t.addEventListener('click',()=>{
   document.querySelectorAll('.nav-tab').forEach(x=>x.classList.remove('active'));
